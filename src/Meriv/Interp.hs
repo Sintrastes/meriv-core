@@ -17,10 +17,7 @@ newtype Assignments v s (e :: MvType s -> *) = Assignments [(v, SomeMvTerm (VarT
 type SearchTree v s (e :: MvType s -> *) = Tree (MvGoal v s e) [] (MvSolution v s e)
 
 -- | Construct a search tree from a set of rules and a goal.
-search :: Unifiable v (MvTerm (VarT v) s e)
-  => MvRules v s e
-  -> MvGoal v s e
-  -> SearchTree v s e
+search :: _ => MvRules v s e -> MvGoal v s e -> SearchTree v s e
 search program goal = go program goal (Assignments [])
   where 
     -- When our goal is exhausted, we can return a solution.
@@ -48,7 +45,7 @@ search program goal = go program goal (Assignments [])
           -- Functional evaluation not currently supported
           case unify clauseHead t of
             -- If it unifies, make the appropriate substitution and continue.
-            Just !(MvUnifier unifier) -> do
+            Just !(SomeMvUnifier unifier) -> do
               let newGoal = MvGoal $
 	            map (\(SomeMvTerm x) -> SomeMvTerm $
 	                    subs (MvUnifier unifier) x
