@@ -2,39 +2,58 @@
 module Meriv.Interp where
 
 import Meriv.Types
+import Meriv.Util.Functor
+import Control.Unification
+import Control.Monad.Tree
+import Control.Monad
+import Data.Functor
+import Debug.Trace
 
-type SearchTree m v t g = Tree (MvGoal m v t g) [] (Solution m v t)
+newtype MvSolution v s (e :: MvType s -> *)
+  = MvSolution [(v, SomeGroundMvTerm s e)]
+
+newtype Assignments v s (e :: MvType s -> *) = Assignments [(v, SomeMvTerm (VarT v) s e)]
+
+type SearchTree v s (e :: MvType s -> *) = Tree (MvGoal v s e) [] (MvSolution v s e)
 
 -- | Construct a search tree from a set of rules and a goal.
-search :: _ => Rules v t m (VoidF v t) -> Goal v t m (VoidF v t) -> m (SearchTree v t m (VoidF v t))
-search program goal = return $ go program goal (Assignments [])
+search :: Unifiable v (MvTerm (VarT v) s e)
+  => MvRules v s e
+  -> MvGoal v s e
+  -> SearchTree v s e
+search program goal = go program goal (Assignments [])
   where 
     -- When our goal is exhausted, we can return a solution.
-    go (Rules !clauses) (Goal []) (Assignments !assignments) = trace "leaf" $
-        Leaf $ Solution $ assignments <&> (\(var, y) -> 
+    go (MvRules !clauses) (MvGoal []) (Assignments !assignments) = trace "leaf" $
+        Leaf $ MvSolution $ assignments <&> (\(var, y) -> 
           -- All variables will be ground at the end of the search
           -- procedure, since the goal (which contains free variables)
           -- will be empty
           let term = fromJust_UNSAFE $ groundSome y in
           -- At the end of the search procedure we evaluate all expressions
           -- to normal form.
-          let evaluatedTerm = trace "Evaluating expression" $ evaluateSomeExpr term in
+          -- let evaluatedTerm = trace "Evaluating expression" $ evaluateSomeExpr term in
           
-          (var, evaluatedTerm)
+          (var, term)
         ) 
     -- If there are still terms left in the goal, we branch on 
     -- the different possibilities for resolving the goal.
-    go (Rules !clauses) (Goal goal@(t : ts)) (Assignments !assgn) = trace "In branch" $ Branch (Goal goal) trees
+    go (MvRules !clauses) (MvGoal goal@(t : ts)) (Assignments !assgn) = trace "In branch" $ Node (MvGoal goal) trees
       where 
         varsInGoal = join $ map variables goal
         trees = do
           clause <- clauses
-          let Clause !clauseHead !clauseBody = freshen varsInGoal clause
-          trace (show $ evaluateTermIfGround t) $ return ()
-          case unify clauseHead (evaluateTermIfGround t) of
+          let MvClause !clauseHead !clauseBody = freshen varsInGoal clause
+          -- trace (show $ evaluateTermIfGround t) $ return ()
+          -- Functional evaluation not currently supported
+          case unify clauseHead t of
             -- If it unifies, make the appropriate substitution and continue.
-            Just !unifier -> do
-              let newGoal = Goal $ map (subsTerm unifier) $ clauseBody <> ts
+            Just !(MvUnifier unifier) -> do
+              let newGoal = MvGoal $
+	            map (\(SomeMvTerm x) -> SomeMvTerm $
+	                    subs (MvUnifier unifier) x
+	                ) $
+	            clauseBody <> ts
               let newAssignments = Assignments $ assgn <> unifier
               return $ go program newGoal newAssignments
             -- Otherwise, this branch is empty.

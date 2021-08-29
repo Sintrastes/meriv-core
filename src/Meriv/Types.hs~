@@ -7,10 +7,9 @@ import Control.Unification
 import Data.Functor.Identity
 import Meriv.Util.Functor
 import Data.Singletons.TH
-import Data.Singletons.Base.TypeRepTYPE
 
 data MvType s where
-  MvHsT   :: TYPE -> MvType s 
+  MvHsT   :: TypeRep -> MvType s 
   MvBaseT :: s -> MvType s
   MvFunT  :: MvType s -> MvType s -> MvType s
   MvPredT :: MvType s
@@ -21,6 +20,7 @@ instance PartialOrd s => PartialOrd (MvType s) where
   MvBaseT x  <= MvBaseT y     = x <= y
   MvHsT x    <= MvHsT y      = x BP.== y
   _          <= _            = False
+
 
 $(genSingletons [''MvType])
 $(singDecideInstances [''MvType])
@@ -51,21 +51,21 @@ instance Eq a => Unifiable (MvTerm (VarT a) s e 'MvPredT) a where
       -- (map (\(v, SomeMvTerm t) -> (v, SomeMvTerm $ subs (MvUnifier u2) t)) u1) ++ u2
 
   subs u term = case term of
-      MvHs     (Var v) -> undefined
+      MvHs (Var v)     -> undefined
       MvEntity (Var v) -> undefined
-      MvApp x y        -> MvApp (subs u x) (subs u y)
+      MvApp x y        -> undefined
       otherwise        -> term
   
   unify (MvApp x y) (MvApp x' y') = do
       -- Note: Need to use singletons here to
       -- check if the two types are the same.
-      xu <- unify x x'
+      -- xu <- unify x x'
       -- yu <- unify y y' 
       return $ undefined -- xu `compose` yu
-  unify (MvEntity (Var x)) e@(MvEntity (Ground y)) = return $ MvUnifier [(x, SomeMvTerm e)]
-  unify e@(MvEntity (Ground y)) (MvEntity (Var x)) = return $ MvUnifier [(x, SomeMvTerm e)]
-  unify (MvHs (Var x)) e@(MvHs (Ground y)) = return $ MvUnifier [(x, SomeMvTerm e)]
-  unify e@(MvHs (Ground y)) (MvHs (Var x)) = return $ MvUnifier [(x, SomeMvTerm e)]
+  unify (MvEntity (Var x)) e@(MvEntity (Ground y)) = return $ MvUnifier [(x, e)]
+  unify e@(MvEntity (Ground y)) (MvEntity (Var x)) = return $ MvUnifier [(x, e)]
+  unify (MvHs (Var x)) e@(MvHs (Ground y)) = return $ MvUnifier [(x, e)]
+  unify e@(MvHs (Ground y)) (MvHs (Var x)) = return $ MvUnifier [(x, e)]
 
 newtype MvGoal a s (e :: MvType s -> *)
   = MvGoal [SomeMvTerm (VarT a) s e]

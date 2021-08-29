@@ -7,8 +7,6 @@ name:                meriv-core
 version:             0.1.0.0
 -- synopsis:
 -- description:
--- bug-reports:
--- license:
 license-file:        LICENSE
 -- author:
 -- maintainer:
@@ -34,7 +32,16 @@ executable meriv-core
     , FlexibleContexts
     , LambdaCase
     , TypeFamilies
+    , TemplateHaskell
+    , BangPatterns
+    , PartialTypeSignatures
     , AllowAmbiguousTypes
+    , GeneralizedNewtypeDeriving
+    , ScopedTypeVariables
+    , TypeApplications
+    , StandaloneKindSignatures
+    , UndecidableInstances
+    , EmptyCase
   other-modules:
       Prelude
     , Control.Unification
@@ -45,5 +52,8 @@ executable meriv-core
       base
     , monad-tree
     , partial-order
+    , singletons
+    , singletons-th
+    , singletons-base
   hs-source-dirs:      src
   default-language:    Haskell2010
