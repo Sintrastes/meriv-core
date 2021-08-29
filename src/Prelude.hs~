@@ -1,9 +1,0 @@
-{-# language NoImplicitPrelude #-}
-
-module Prelude
-  ( module C
-  , module Prelude
-  , module Data.PartialOrd
-  ) where
-
-import BasePrelude as C hiding ((<=),(>=),(==))
