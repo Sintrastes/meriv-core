@@ -41,6 +41,7 @@ executable meriv-core
     , TypeApplications
     , StandaloneKindSignatures
     , UndecidableInstances
+    , InstanceSigs
     , EmptyCase
   other-modules:
       Prelude
