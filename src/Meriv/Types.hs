@@ -26,16 +26,16 @@ data HsRep =
 type family ToHsType (r :: HsRep) :: * where
   ToHsType IntR    = Int
   ToHsType StringR = String
-  
+
 data MvType s where
-  MvHsT   :: HsRep -> MvType s 
+  MvHsT   :: HsRep -> MvType s
   MvBaseT :: s -> MvType s
   MvFunT  :: MvType s -> MvType s -> MvType s
   MvPredT :: MvType s
 
 instance PartialOrd s => PartialOrd (MvType s) where
   MvPredT    <= MvPredT      = True
-  MvFunT x y <= MvFunT x' y' = x >= x' && y <= y' 
+  MvFunT x y <= MvFunT x' y' = x >= x' && y <= y'
   MvBaseT x  <= MvBaseT y    = x <= y
   MvHsT x    <= MvHsT y      = x BP.== y
   _          <= _            = False
@@ -48,61 +48,76 @@ data MvTerm f s (e :: MvType s -> *) (t :: MvType s) where
   MvEntity  :: Sing x -> f (e x) -> MvTerm f s e x
   MvApp     :: MvTerm f s e ('MvFunT x y) -> MvTerm f s e x -> MvTerm f s e y
 
+-- | Type class for a schema whose entities types can
+-- be inferred.
+class SingKind s => SinglyTyped s (e :: MvType s -> *) where
+  getTypeSing :: e x -> Sing x
+
 typeOfMv :: MvTerm f s e t -> Sing t
 typeOfMv (MvHs s _) = s
-typeOfMv (MvEntity s _) = s
+typeOfMv (MvEntity s x) = s
 typeOfMv (MvApp f x) = typeOfMv f `unsafeTypeApp` typeOfMv x
   where unsafeTypeApp (SMvFunT x y) _ = unsafeCoerce y
 
 type GroundMvTerm s (e :: MvType s -> *) t
-  = MvTerm Identity s e t 
+  = MvTerm Identity s e t
 
 data SomeMvTerm f s (e :: MvType s -> *)
-  = forall t. SomeMvTerm (MvTerm f s e t) 
+  = forall t. SomeMvTerm (MvTerm f s e t)
 
 type SomeGroundMvTerm s (e :: MvType s -> *)
   = SomeMvTerm Identity s e
 
-instance Eq a => Unifiable (MvTerm (VarT a) s e t) a where
+instance (SDecide s, Eq a) => Unifiable (MvTerm (VarT a) s e t) a where
   newtype Unifier (MvTerm (VarT a) s e t) a
     = MvUnifier [(a, SomeMvTerm (VarT a) s e)]
         deriving(Semigroup, Monoid)
-  
-  compose (MvUnifier u1) (MvUnifier u2) = MvUnifier $  
+
+  compose (MvUnifier u1) (MvUnifier u2) = MvUnifier $
       undefined
       -- Todo: Need to mapMaybe here based on whether or not
       -- the types line up.
       -- (map (\(v, SomeMvTerm t) -> (v, SomeMvTerm $ subs (MvUnifier u2) t)) u1) ++ u2
 
-  subs u term = case term of
+  subs (MvUnifier u) term = case term of
       MvHs     s (Var v) -> maybe term (coerceSomeTerm s) (lookup v u)
       MvEntity s (Var v) -> maybe term (coerceSomeTerm s) (lookup v u)
-      MvApp x y          -> MvApp (subs u x) (subs u y)
+      MvApp x y          -> MvApp (subs (MvUnifier u) x) (subs (MvUnifier u) y)
       otherwise          -> term
-  
+
   unify (MvApp x y) (MvApp x' y') = do
       -- Note: Need to use singletons here to
       -- check if the two types are the same.
-      xu <- unify x x'
-      yu <- unify y y' 
-      return $ undefined -- xu `compose` yu
+      xu <- case typeOfMv x %~ typeOfMv x' of
+                Proved Refl -> unsafeCoerce $ unify x x'
+                otherwise   -> Nothing
+      yu <- case typeOfMv y %~ typeOfMv y' of
+                Proved Refl -> unsafeCoerce $ unify y y'
+                otherwise   -> Nothing
+      return $ xu `compose` yu
   unify (MvEntity t1 (Var x)) e@(MvEntity t2 (Ground y)) =
-      case t1 %~ t2 of 
+      case t1 %~ t2 of
           Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
           otherwise   -> Nothing
   unify e@(MvEntity t1 (Ground y)) (MvEntity t2 (Var x)) =
-      case t1 %~ t2 of 
+      case t1 %~ t2 of
           Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
           otherwise   -> Nothing
-  unify (MvHs t1 (Var x)) e@(MvHs t2 (Ground y)) = return $ MvUnifier [(x, SomeMvTerm e)]
-  unify e@(MvHs t1 (Ground y)) (MvHs t2 (Var x)) = return $ MvUnifier [(x, SomeMvTerm e)]
+  unify (MvHs t1 (Var x)) e@(MvHs t2 (Ground y)) =
+      case t1 %~ t2 of
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
+          otherwise   -> Nothing
+  unify e@(MvHs t1 (Ground y)) (MvHs t2 (Var x)) =
+      case t1 %~ t2 of
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
+          otherwise   -> Nothing
 
 instance Eq a => Unifiable (SomeMvTerm (VarT a) s e) a where
   newtype Unifier (SomeMvTerm (VarT a) s e) a
     = SomeMvUnifier [(a, SomeMvTerm (VarT a) s e)]
         deriving(Semigroup, Monoid)
-  
-  compose (SomeMvUnifier u1) (SomeMvUnifier u2) = SomeMvUnifier $  
+
+  compose (SomeMvUnifier u1) (SomeMvUnifier u2) = SomeMvUnifier $
       undefined
       -- Todo: Need to mapMaybe here based on whether or not
       -- the types line up.
