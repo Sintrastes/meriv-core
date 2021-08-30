@@ -1,6 +1,10 @@
 
 module Meriv.Util.Functor where
 
-data VarT x a
+import Data.Singletons
+
+data VarT x t a
   = Ground a
-  | Var x
+  | Var (Sing t) x
+
+data IdT t a = Id a

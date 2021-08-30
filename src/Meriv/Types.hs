@@ -44,39 +44,47 @@ instance PartialOrd s => PartialOrd (MvType s) where
 $(genSingletons [''HsRep, ''MvType])
 $(singDecideInstances [''HsRep, ''MvType])
 
-data MvTerm f s (e :: MvType s -> *) (t :: MvType s) where
-  MvHs      :: Sing ('MvHsT @s rep) -> f (ToHsType rep) -> MvTerm f s e ('MvHsT rep)
-  MvEntity  :: Sing x -> f (e x) -> MvTerm f s e x
-  MvApp     :: MvTerm f s e ('MvFunT x y) -> MvTerm f s e x -> MvTerm f s e y
+data MvTerm s (e :: MvType s -> *) (f :: MvType s -> * -> *) (t :: MvType s) where
+  MvHs      :: Sing ('MvHsT @s rep) -> f ('MvHsT @s rep) (ToHsType rep) -> MvTerm s e f ('MvHsT rep)
+  MvEntity  :: f x (e x) -> MvTerm s e f x
+  MvApp     :: MvTerm s e f ('MvFunT x y) -> MvTerm s e f x -> MvTerm s e f y
 
 -- | Type class for a schema whose entities types can
 -- be inferred.
 class SingKind s => SinglyTyped s (e :: MvType s -> *) where
   getTypeSing :: e x -> Sing x
 
-typeOfMv :: MvTerm f s e t -> Sing t
-typeOfMv (MvHs s _) = s
-typeOfMv (MvEntity s x) = s
-typeOfMv (MvApp f x) = resultType (typeOfMv f)
+typeOfGroundMv :: SinglyTyped s e => MvTerm s e IdT t -> Sing t
+typeOfGroundMv (MvHs s x) = s
+typeOfGroundMv (MvEntity (Id x)) = getTypeSing x
+typeOfGroundMv (MvApp f x) = resultType (typeOfGroundMv f)
+
+typeOfMv :: SinglyTyped s e => MvTerm s e (VarT a) t -> Sing t
+typeOfMv (MvHs s x)            = s
+typeOfMv (MvEntity (Ground x)) = getTypeSing x
+typeOfMv (MvEntity (Var s x))  = s
+typeOfMv (MvApp f x)           = resultType (typeOfMv f)
 
 resultType :: Sing ('MvFunT x y) -> Sing y
 resultType (SMvFunT a b) = b  
 
 type GroundMvTerm s (e :: MvType s -> *) t
-  = MvTerm Identity s e t
+  = MvTerm s e IdT t
 
-data SomeMvTerm f s (e :: MvType s -> *)
-  = forall t. SomeMvTerm (MvTerm f s e t)
+data SomeMvTerm s (e :: MvType s -> *) f
+  = forall t. SomeMvTerm (MvTerm s e f t)
 
 type SomeGroundMvTerm s (e :: MvType s -> *)
-  = SomeMvTerm Identity s e
+  = SomeMvTerm s e IdT
 
-type CommonUnifier s e a = [(a, SomeMvTerm (VarT a) s e)]
+type CommonUnifier s e a = [(a, SomeMvTerm s e (VarT a))]
 
 fromSomeUnifier (SomeMvUnifier u) = MvUnifier u
 
-instance (SDecide s, Eq a) => Unifiable (MvTerm (VarT a) s e t) a where
-  newtype Unifier (MvTerm (VarT a) s e t) a
+toSomeUnifier (MvUnifier u) = SomeMvUnifier u
+
+instance (SDecide s, SinglyTyped s e, Eq a) => Unifiable (MvTerm s e (VarT a) t) a where
+  newtype Unifier (MvTerm s e (VarT a) t) a
     = MvUnifier (CommonUnifier s e a)
         deriving(Semigroup, Monoid)
 
@@ -85,8 +93,8 @@ instance (SDecide s, Eq a) => Unifiable (MvTerm (VarT a) s e t) a where
          ++ u2
 
   subs (MvUnifier u) term = case term of
-      MvHs     s (Var v) -> maybe term (coerceSomeTerm s) (lookup v u)
-      MvEntity s (Var v) -> maybe term (coerceSomeTerm s) (lookup v u)
+      MvHs   _ (Var s v) -> maybe term (coerceSomeTerm s) (lookup v u)
+      MvEntity (Var s v) -> maybe term (coerceSomeTerm s) (lookup v u)
       MvApp x y          -> MvApp (subs (MvUnifier u) x) (subs (MvUnifier u) y)
       otherwise          -> term
 
@@ -100,44 +108,48 @@ instance (SDecide s, Eq a) => Unifiable (MvTerm (VarT a) s e t) a where
                 Proved Refl -> fromSomeUnifier <$> unify (SomeMvTerm y) (SomeMvTerm y')
                 otherwise   -> Nothing
       return $ xu `compose` yu
-  unify (MvEntity t1 (Var x)) e@(MvEntity t2 (Ground y)) =
+  unify (MvEntity (Var t1 x)) e@(MvEntity (Ground y)) = let t2 = typeOfMv e in
       case t1 %~ t2 of
           Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
           otherwise   -> Nothing
-  unify e@(MvEntity t1 (Ground y)) (MvEntity t2 (Var x)) =
+  unify e@(MvEntity (Ground y)) (MvEntity (Var t1 x)) = let t2 = typeOfMv e in
       case t1 %~ t2 of
           Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
           otherwise   -> Nothing
-  unify (MvHs t1 (Var x)) e@(MvHs t2 (Ground y)) =
+  unify (MvHs _ (Var t1 x)) e@(MvHs t2 (Ground y)) = 
       case t1 %~ t2 of
           Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
           otherwise   -> Nothing
-  unify e@(MvHs t1 (Ground y)) (MvHs t2 (Var x)) =
+  unify e@(MvHs t2 (Ground y)) (MvHs _ (Var t1 x)) = 
       case t1 %~ t2 of
           Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
           otherwise   -> Nothing
 
-instance Eq a => Unifiable (SomeMvTerm (VarT a) s e) a where
-  newtype Unifier (SomeMvTerm (VarT a) s e) a
+instance (SDecide s, SinglyTyped s e, Eq a) => Unifiable (SomeMvTerm s e (VarT a)) a where
+  newtype Unifier (SomeMvTerm s e (VarT a)) a
     = SomeMvUnifier (CommonUnifier s e a)
         deriving(Semigroup, Monoid)
 
   compose (SomeMvUnifier u1) (SomeMvUnifier u2) = SomeMvUnifier $
       (map (\(v, t) -> (v, subs (SomeMvUnifier u2) t)) u1) ++ u2
 
-  subs (SomeMvUnifier u) term = undefined
+  subs (SomeMvUnifier u) (SomeMvTerm term)
+      = SomeMvTerm $ subs (MvUnifier u) term
 
-  unify x y = undefined
+  unify (SomeMvTerm x) (SomeMvTerm y) =
+      case typeOfMv x %~ typeOfMv y of
+          Proved Refl -> toSomeUnifier <$> unify x y
+	  otherwise   -> Nothing
 
-coerceSomeTerm :: Sing t -> SomeMvTerm f s e -> MvTerm f s e t
+coerceSomeTerm :: Sing t -> SomeMvTerm s e f -> MvTerm s e f t
 coerceSomeTerm _ (SomeMvTerm x) = unsafeCoerce x
 
 newtype MvGoal a s (e :: MvType s -> *)
-  = MvGoal [SomeMvTerm (VarT a) s e]
+  = MvGoal [SomeMvTerm s e (VarT a)]
 
 data MvClause a s (e :: MvType s -> *) = MvClause {
-  head :: SomeMvTerm (VarT a) s e,
-  body :: [SomeMvTerm (VarT a) s e]
+  head :: SomeMvTerm s e (VarT a),
+  body :: [SomeMvTerm s e (VarT a)]
 }
 
 type MvRule a s (e :: MvType s -> *)
@@ -148,10 +160,10 @@ newtype MvRules a s (e :: MvType s -> *)
 
 -- | Converts an expression into a ground expression
 --   if it has no free variables.
-ground :: MvTerm (VarT v) s e t -> Maybe (MvTerm Identity s e t)
+ground :: MvTerm s e (VarT v) t -> Maybe (MvTerm s e IdT t)
 ground = \case
-  MvHs s (Ground x) -> Just $ MvHs s (Identity x)
-  MvEntity s (Ground x) -> Just $ MvEntity  s (Identity x)
+  MvHs s (Ground x) -> Just $ MvHs s (Id x)
+  MvEntity (Ground x) -> Just $ MvEntity (Id x)
   MvApp mX mY -> do
     x <- ground mX
     y <- ground mY

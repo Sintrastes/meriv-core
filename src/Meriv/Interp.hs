@@ -12,7 +12,7 @@ import Debug.Trace
 newtype MvSolution v s (e :: MvType s -> *)
   = MvSolution [(v, SomeGroundMvTerm s e)]
 
-newtype Assignments v s (e :: MvType s -> *) = Assignments [(v, SomeMvTerm (VarT v) s e)]
+newtype Assignments v s (e :: MvType s -> *) = Assignments [(v, SomeMvTerm s e (VarT v))]
 
 type SearchTree v s (e :: MvType s -> *) = Tree (MvGoal v s e) [] (MvSolution v s e)
 

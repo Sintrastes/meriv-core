@@ -43,12 +43,15 @@ executable meriv-core
     , UndecidableInstances
     , InstanceSigs
     , EmptyCase
+    , TypeOperators
   other-modules:
       Prelude
     , Control.Unification
     , Meriv.Types
     , Meriv.Interp
+    , Meriv.Query
     , Meriv.Util.Functor
+    , Meriv.Util.HList
   build-depends:
       base
     , monad-tree
