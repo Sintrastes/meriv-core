@@ -1,3 +1,4 @@
+
 module Main where
 
 import Meriv.Types
@@ -53,10 +54,10 @@ exampleProgram = MvRules
   ]
 
 main :: IO ()
-main = do
-    let searchResults = bfs $ search exampleProgram (MvGoal [
-            SomeMvTerm $ MvApp (MvApp (livesIn Ground) (MvEntity $ Ground Nate))
-	        (MvEntity $ Var (SMvBaseT SPlace) "X")
-          ]
-         )
+main = 
+    -- let searchResults = bfs $ search exampleProgram (MvGoal [
+    --         SomeMvTerm $ MvApp (MvApp (livesIn Ground) (MvEntity $ Ground Nate))
+    --	        (MvEntity $ Var (SMvBaseT SPlace) "X")
+    --       ]
+    --      )
     putStrLn "Hello, Meriv!"

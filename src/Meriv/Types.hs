@@ -7,11 +7,11 @@ import Control.Unification
 import Data.Functor.Identity
 import Meriv.Util.Functor
 import Data.Singletons.Decide
-import Data.Singletons.Base.TH
+import Data.Singletons.TH
 import Data.Kind
 import Data.Typeable
 import GHC.Exts
-import Data.Singletons.TH.CustomStar
+import Data.Singletons
 import Unsafe.Coerce
 import Data.Maybe
 
