@@ -8,9 +8,13 @@ import Control.Monad.Tree
 import Control.Monad
 import Data.Functor
 import Debug.Trace
+import Data.List
 
 newtype MvSolution v s (e :: MvType s -> *)
   = MvSolution [(v, SomeGroundMvTerm s e)]
+
+instance ShowAllTypes e => Show (MvSolution String s e) where
+    show (MvSolution xs) = "{" ++ intercalate "," (fmap show xs) ++ "}"
 
 newtype Assignments v s (e :: MvType s -> *) = Assignments [(v, SomeMvTerm s e (VarT v))]
 
@@ -45,7 +49,7 @@ search program goal = go program goal (Assignments [])
           -- Functional evaluation not currently supported
           case unify clauseHead t of
             -- If it unifies, make the appropriate substitution and continue.
-            Just !(SomeMvUnifier unifier) -> do
+            Just !(SomeMvUnifier unifier) -> trace "Unifies" $ do
               let newGoal = MvGoal $
 	            map (\(SomeMvTerm x) -> SomeMvTerm $
 	                    subs (MvUnifier unifier) x

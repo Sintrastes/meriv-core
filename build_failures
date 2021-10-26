@@ -1,0 +1,87 @@
+
+Build failures:
+---------------
+
+-----------------------------------------------------------------------------------
+
+ghc8107, nixpkgs-2105, aarch64-multiplatform-musl:
+
+Preprocessing library for th-orphans-0.13.11..
+Building library for th-orphans-0.13.11..
+[1 of 2] Compiling Language.Haskell.TH.Instances.Internal ( src/Language/Haskell/TH/Instances/Internal.hs, dist/build/Language/Haskell/TH/Instances/Internal.o )
+[2 of 2] Compiling Language.Haskell.TH.Instances ( src/Language/Haskell/TH/Instances.hs, dist/build/Language/Haskell/TH/Instances.o )
+---> Starting remote-iserv on port 5789
+---| remote-iserv should have started on 5789
+Listening on port 5789
+remote-iserv: internal error: mmapForLinkerMarkExecutable: mprotect: Out of memory
+
+    (GHC version 8.10.7 for aarch64_unknown_linux)
+    Please report this as a GHC bug:  https://www.haskell.org/ghc/reportabug
+qemu: uncaught target signal 6 (Aborted) - core dumped
+iserv-proxy: {handle: <socket: 10>}: GHCi.Message.remoteCall: end of file
+/nix/store/a06i1afwhfl2zlmyplvm9xdqr4xd2xqh-iserv-wrapper/bin/iserv-wrapper: line 10:   197 Aborted                 (core dumped) /nix/store/l2rihkdk954npllv6fkyilg7l6n9pbgq-qemu-6.0.0/bin/qemu-aarch64 /nix/store/xjb106g08l025axsg8bn11qzv9hqi70x-remote-iserv-exe-remote-iserv-aarch64-unknown-linux-musl-8.10.7/bin/remote-iserv tmp $PORT
+
+<no location info>: error: ghc: ghc-iserv terminated (1)
+
+builder for '/nix/store/i48frk3pi4g20w53sb2s4q9cg0swvpz5-th-orphans-lib-th-orphans-aarch64-unknown-linux-musl-0.13.11.drv' failed with exit code 1
+cannot build derivation '/nix/store/j1dr5w7gnhlzyvv11l3syad26cxgll88-aarch64-unknown-linux-musl-th-desugar-lib-th-desugar-1.11-config.drv': 1 dependencies couldn't be built
+cannot build derivation '/nix/store/fc8a2bvxgk37vkbvsg014qzd4yag6mlp-th-desugar-lib-th-desugar-aarch64-unknown-linux-musl-1.11.drv': 1 dependencies couldn't be built
+cannot build derivation '/nix/store/rvybl83i2p6iyx9wmy7bxi96z0m7lll3-aarch64-unknown-linux-musl-singletons-lib-singletons-2.7-config.drv': 1 dependencies couldn't be built
+cannot build derivation '/nix/store/awh7yia7yj8d76azhr1pk2ds1y8277rv-singletons-lib-singletons-aarch64-unknown-linux-musl-2.7.drv': 1 dependencies couldn't be built
+cannot build derivation '/nix/store/acc55mglfxrfp375247651djjl8z12jx-meriv-core-exe-meriv-core-aarch64-unknown-linux-musl-0.1.0.0.drv': 1 dependencies couldn't be built
+error: build of '/nix/store/acc55mglfxrfp375247651djjl8z12jx-meriv-core-exe-meriv-core-aarch64-unknown-linux-musl-0.1.0.0.drv' failed
+
+
+-----------------------------------------------------------------------------------
+
+ghc8107, nixpkgs-unstable, aarch64-multiplatform-musl:
+
+Same error as above
+
+-----------------------------------------------------------------------------------
+
+ghc901, nixpkgs-unstable, aarch64-multiplatform-musl:
+
+(Note: Had to change the cabal deps slightly to get this working with ghc 9.0.1)
+
+trace: To make project.plan-nix for haskell-project a fixed-output derivation but not materialized, set `plan-sha256` to the output of the 'calculateMaterializedSha' script in 'passthru'.
+trace: To materialize project.plan-nix for haskell-project entirely, pass a writable path as the `materialized` argument and run the 'updateMaterialized' script in 'passthru'.
+building '/nix/store/w20fwjg9z9k0psghm8pxfcsx5m1di2x4-haskell-project-plan-to-nix-pkgs.drv'...
+Using index-state 2021-08-30T00:00:00Z
+Warning: The package list for 'hackage.haskell.org-at-2021-08-30T000000Z' is
+18871 days old.
+Run 'cabal update' to get the latest list of available packages.
+Warning: Requested index-state 2021-08-30T00:00:00Z is newer than
+'hackage.haskell.org-at-2021-08-30T000000Z'! Falling back to older state
+(2021-08-29T23:59:44Z).
+Resolving dependencies...
+Wrote freeze file: /build/tmp.o04kVHkn62/cabal.project.freeze
+Warning:
+/nix/store/w569zchq96017fnlq60pihrzpp3686qk-haskell-project-plan-to-nix-pkgs/meriv-core.cabal:1:27:
+Packages with 'cabal-version: 1.12' or later should specify a specific version
+of the Cabal spec of the form 'cabal-version: x.y'. Use 'cabal-version: 2.0'.
+trace: To make project.plan-nix for haskell-project a fixed-output derivation but not materialized, set `plan-sha256` to the output of the 'calculateMaterializedSha' script in 'passthru'.
+trace: To materialize project.plan-nix for haskell-project entirely, pass a writable path as the `materialized` argument and run the 'updateMaterialized' script in 'passthru'.
+trace: WARNING: No materialized dummy-ghc-data for aarch64-unknown-linux-musl-aarch64-unknown-linux-musl-ghc-9.0.1-x86_64-linux.
+trace: To make this a fixed-output derivation but not materialized, set `sha256` to the output of the 'calculateMaterializedSha' script in 'passthru'.
+trace: To materialize this entirely, pass a writable path as the `materialized` argument and run the 'updateMaterialized' script in 'passthru'.
+trace: WARNING: 8.8.2 is out of date, consider using 8.8.4.
+building '/nix/store/jr52a6m6vg2j0bi4ci8gxh3nknvflara-haskell-project-plan-to-nix-pkgs.drv'...
+Using index-state 2021-08-30T00:00:00Z
+Warning: The package list for 'hackage.haskell.org-at-2021-08-30T000000Z' is
+18871 days old.
+Run 'cabal update' to get the latest list of available packages.
+Warning: Requested index-state 2021-08-30T00:00:00Z is newer than
+'hackage.haskell.org-at-2021-08-30T000000Z'! Falling back to older state
+(2021-08-29T23:59:44Z).
+Resolving dependencies...
+Wrote freeze file: /build/tmp.iOck7a6AxV/cabal.project.freeze
+Warning:
+/nix/store/mjgrymy07gvrxa6xargwj8v233sbb044-haskell-project-plan-to-nix-pkgs/meriv-core.cabal:1:27:
+Packages with 'cabal-version: 1.12' or later should specify a specific version
+of the Cabal spec of the form 'cabal-version: x.y'. Use 'cabal-version: 2.0'.
+error: attribute 'remote-iserv' missing, at /nix/store/5zwlq8v8vxk0599rz5w8nn486rhwm9hb-haskellNix-src/overlays/armv6l-linux.nix:7:44
+
+
+
+
