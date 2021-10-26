@@ -34,6 +34,7 @@ data MvType s where
   MvBaseT :: s -> MvType s
   MvFunT  :: MvType s -> MvType s -> MvType s
   MvPredT :: MvType s
+    deriving(Eq, Ord)
 
 instance Show s => Show (MvType s) where
   show (MvHsT x)    = show x

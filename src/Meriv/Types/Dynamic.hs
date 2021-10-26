@@ -18,7 +18,8 @@ parseMerivSchema ts es =
         Just (SomeEntityParser eP entityParser) ->
           pure $ SomeMerivSchema sP eP typeParser entityParser
 
-data SomeMerivSchema = forall s e. SomeMerivSchema (Proxy s) (Proxy e) (TypeParser s) (EntityParser s e)
+data SomeMerivSchema = forall s e. SomeMerivSchema (Proxy s) (Proxy e) 
+  (TypeParser s) (EntityParser s e)
 
 data EntityDecl s (x :: Symbol) (t :: s) (a :: s) where
   EntityDecl :: EntityDecl s x t t
