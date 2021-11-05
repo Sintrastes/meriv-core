@@ -1,6 +1,7 @@
 
 module Main where
 
+import Meriv.Query
 import Meriv.Types
 import Data.Typeable
 import Data.Functor.Identity
@@ -11,11 +12,12 @@ import Data.Singletons.TH
 import Control.Monad.Tree
 import Meriv.Interp
 import GHC.Types
+import Data.List.Singletons
 
 data MySchema =
     Person
   | Place
-  | Thing deriving(Show)
+  | Thing deriving(Show, Eq, Ord)
 
 {-
 type PersonSym0 :: MySchema
@@ -76,7 +78,7 @@ instance SinglyTyped MySchema MyEntity where
 instance ShowAllTypes MyEntity where
     showAll = \case
         Nate         -> "nate"
-        will         -> "will"
+        Will         -> "will"
         NewYorkCity  -> "new_york_city"
         NewYorkState -> "new_york_state"
         Guitar       -> "guitar"
@@ -93,60 +95,87 @@ instance EntityEq MySchema MyEntity where
     SubsetOf `entityEquals` SubsetOf = True
     _ `entityEquals` _ = False   
 
-livesIn f = MvEntity (f LivesIn)
+livesIn f t = MvEntity (f t LivesIn)
 
-subsetOf f = MvEntity (f SubsetOf)
+subsetOf f t = MvEntity (f t SubsetOf)
 
 example :: GroundMvTerm MySchema MyEntity 'MvPredT
 example =
-  MvApp (MvApp (livesIn Id)
-     (MvEntity $ Id Nate))
-     (MvEntity $ Id NewYorkCity)
+  MvApp (MvApp (livesIn Id livesInType)
+     (MvEntity $ Id (SMvBaseT SPerson) Nate))
+     (MvEntity $ Id (SMvBaseT SPlace) NewYorkCity)
 
 exampleProgram = MvRules
   [
       MvClause
-        (SomeMvTerm $ MvApp
-           (MvApp (livesIn Ground) (MvEntity $ Ground Nate))
-	           (MvEntity $ Ground NewYorkCity))
+        (SomeMvTerm SMvPredT $ MvApp
+           (MvApp (livesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
+	           (MvEntity $ Ground (SMvBaseT SPlace) NewYorkCity))
+        []
+    , MvClause 
+        (SomeMvTerm SMvPredT $ MvApp
+            (MvApp (subsetOf Ground subsetOfType) (MvEntity $ Ground (SMvBaseT SPlace) NewYorkCity))
+	            (MvEntity $ Ground (SMvBaseT SPlace) NewYorkState))
         []
     , MvClause
-        (SomeMvTerm $ MvApp
-           (MvApp (livesIn Ground) (MvEntity $ Var (SMvBaseT SPerson) "X"))
+        (SomeMvTerm SMvPredT $ MvApp
+           (MvApp (livesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
 	           (MvEntity $ Var (SMvBaseT SPlace) "Z"))
         [
-          (SomeMvTerm $ MvApp
-	     (MvApp (livesIn Ground) (MvEntity $ Var (SMvBaseT SPerson) "X"))
+          (SomeMvTerm SMvPredT $ MvApp
+	     (MvApp (livesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
 	     (MvEntity $ Var (SMvBaseT SPlace) "Y"))
-        , (SomeMvTerm $ MvApp
-             (MvApp (subsetOf Ground) (MvEntity $ Var (SMvBaseT SPlace) "Y"))
+        , (SomeMvTerm SMvPredT $ MvApp
+             (MvApp (subsetOf Ground subsetOfType) (MvEntity $ Var (SMvBaseT SPlace) "Y"))
 	     (MvEntity $ Var (SMvBaseT SPlace) "Z"))
         ]
   ]
 
-typeOfSome (SomeMvTerm x) = fromSing $ typeOfMv x
+typeOfSome (SomeMvTerm _ x) = fromSing $ typeOfMv x
+
+livesInType = (SMvFunT (SMvBaseT SPerson)
+                               (SMvFunT (SMvBaseT SPlace) SMvPredT))
+
+subsetOfType = SMvFunT (SMvBaseT SPlace)
+                               (SMvFunT (SMvBaseT SPlace) SMvPredT)
 
 main :: IO ()
 main = do
-    let term1 = SomeMvTerm $ MvEntity $ Ground Nate
-    let nyc = SomeMvTerm $ MvEntity $ Ground NewYorkCity
-    let term2 = SomeMvTerm $ MvEntity $ Var (SMvBaseT SPerson) "X"
-    let term3 = SomeMvTerm $ MvApp
-           (MvApp (livesIn Ground) (MvEntity $ Ground Nate))
-	           (MvEntity $ Ground NewYorkCity)
-    let term4 = SomeMvTerm $ MvApp
-           (MvApp (livesIn Ground) (MvEntity $ Ground Nate))
-	           (MvEntity $ Var (SMvBaseT SPlace) "X")
-    let term5 = SomeMvTerm $ MvEntity $ Var (SMvBaseT SPlace) "X"
-    let term6 = SomeMvTerm $ MvEntity $ Ground NewYorkCity
+    -- Setup:
+    let term1 = SomeMvTerm (SMvBaseT SPerson) $ MvEntity $ Ground (SMvBaseT SPerson) Nate -- nate
+    let term2 = SomeMvTerm (SMvBaseT SPerson) $ MvEntity $ Var (SMvBaseT SPerson) "X" -- X: Person
+    
+    let term3 = SomeMvTerm SMvPredT $ MvApp
+           (MvApp (livesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
+	           (MvEntity $ Ground (SMvBaseT SPlace) NewYorkCity) -- livesIn(nate, new_york_city)
+    let term4 = SomeMvTerm SMvPredT $ MvApp
+           (MvApp (livesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
+	           (MvEntity $ Var (SMvBaseT SPlace) "X") -- livesIn(nate, X: Place)
+	           
+    let term5 = SomeMvTerm (SMvBaseT SPlace) $ MvEntity $ Var (SMvBaseT SPlace) "X" -- X: Place
+    let term6 = SomeMvTerm (SMvBaseT SPlace) $ MvEntity $ Ground (SMvBaseT SPlace) NewYorkCity -- new_york_city
+    
+    -- Unification examles:
     let unifier = unify term1 term2
-    print (typeOfSome nyc)
+    putStrLn "Typing test:"
+    -- print $ term6
+    print $ typeOfSome term6
+    putStrLn "First Unification Test: (X = nate)"
     print unifier
     let unifier2 = unify term3 term4
+    putStrLn "Second Unification Test: (X = new york city)"
     print unifier2
+    putStrLn "Third Unification Test: (X = new york city)"
     print $ unify term5 term6
-    let searchResults = bfs $ search exampleProgram (MvGoal [
-            SomeMvTerm $ MvApp (MvApp (livesIn Ground) (MvEntity $ Ground Nate))
+    putStrLn "Search test:"
+    -- Search example:
+    let goal = (MvGoal [
+            SomeMvTerm SMvPredT $ MvApp (MvApp (livesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
             (MvEntity $ Var (SMvBaseT SPlace) "X")
           ])
+    let searchResults = take 3 $ bfs $ search exampleProgram goal
     print searchResults
+    -- Query API example:
+    -- let Just query = mkQuery ((SMvBaseT SPlace) `SCons` SNil) goal id
+    -- print $ runQuery bfs query exampleProgram
+    

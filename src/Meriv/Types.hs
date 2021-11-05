@@ -15,6 +15,8 @@ import Unsafe.Coerce
 import Data.Maybe
 import Data.Type.Coercion
 import Data.Type.Equality
+import Data.List
+import Debug.Trace
 
 -- Note: We have to use this, because
 -- singletons does not currently play well with
@@ -272,21 +274,21 @@ instance (SDecide HsRep,
                                                          -> Type) where
       testCoercion = decideCoercion
 
-data MvTerm s (e :: MvType s -> *) (f :: MvType s -> * -> *) (t :: MvType s) where
-  MvHs      :: Sing ('MvHsT @s rep) -> f ('MvHsT @s rep) (ToHsType rep) -> MvTerm s e f ('MvHsT rep)
-  MvEntity  :: f x (e x) -> MvTerm s e f x
+data MvTerm s (e :: MvType s -> *) (f :: (MvType s -> *) -> MvType s -> *) (t :: MvType s) where
+  MvHs      :: Sing ('MvHsT @s rep) -> f e ('MvHsT @s rep) -> MvTerm s e f ('MvHsT rep)
+  MvEntity  :: f e x -> MvTerm s e f x
   MvApp     :: MvTerm s e f ('MvFunT x y) -> MvTerm s e f x -> MvTerm s e f y
 
 instance (ShowAllTypes e) => Show (MvTerm s e IdT t) where
     -- show (MvHs SIntR x)    = show x
     -- show (MvHs SStringR x) = show x
-    show (MvEntity (Id x)) = showAll x
+    show (MvEntity (Id _ x)) = showAll x
     show (MvApp x y)       = show x ++ " " ++ show y
 
 instance (ShowAllTypes e) => Show (MvTerm s e (VarT String) t) where
     -- show (MvHs SIntR x)    = show x
     -- show (MvHs SStringR x) = show x
-    show (MvEntity (Ground x)) = showAll x
+    show (MvEntity (Ground _ x)) = showAll x
     show (MvEntity (Var _ x))  = x
     show (MvApp x y)           = show x ++ " " ++ show y
 
@@ -294,13 +296,13 @@ class ShowAllTypes (e :: MvType s -> *) where
     showAll :: e t -> String
 
 instance ShowAllTypes e => Show (SomeMvTerm s e IdT) where
-  show (SomeMvTerm x) = show x
+  show (SomeMvTerm _ x) = show x
 
 instance ShowAllTypes e => Show (SomeMvTerm s e (VarT String)) where
-  show (SomeMvTerm x) = show x
+  show (SomeMvTerm _ x) = show x
 
 instance Variable (SomeMvTerm s e (VarT String)) String where
-    variables (SomeMvTerm x) = variables x
+    variables (SomeMvTerm _ x) = variables x
 
 instance Variable (MvTerm s e (VarT String) t) String where
     variables (MvHs _ (Var _ x)) = [x]
@@ -313,14 +315,14 @@ instance Variable (MvTerm s e (VarT String) t) String where
 class SingKind s => SinglyTyped s (e :: MvType s -> *) where
   getTypeSing :: e x -> Sing x
 
-typeOfGroundMv :: SinglyTyped s e => MvTerm s e IdT t -> Sing t
+typeOfGroundMv :: MvTerm s e IdT t -> Sing t
 typeOfGroundMv (MvHs s x) = s
-typeOfGroundMv (MvEntity (Id x)) = getTypeSing x
+typeOfGroundMv (MvEntity (Id s x)) = s
 typeOfGroundMv (MvApp f x) = resultType (typeOfGroundMv f)
 
-typeOfMv :: SinglyTyped s e => MvTerm s e (VarT a) t -> Sing t
+typeOfMv :: MvTerm s e (VarT a) t -> Sing t
 typeOfMv (MvHs s x)            = s
-typeOfMv (MvEntity (Ground x)) = getTypeSing x
+typeOfMv (MvEntity (Ground s x)) = s
 typeOfMv (MvEntity (Var s x))  = s
 typeOfMv (MvApp f x)           = resultType (typeOfMv f)
 
@@ -331,7 +333,7 @@ type GroundMvTerm s (e :: MvType s -> *) t
   = MvTerm s e IdT t
 
 data SomeMvTerm s (e :: MvType s -> *) f
-  = forall t. SomeMvTerm (MvTerm s e f t)
+  = forall t. SomeMvTerm (Sing t) (MvTerm s e f t)
 
 type SomeGroundMvTerm s (e :: MvType s -> *)
   = SomeMvTerm s e IdT
@@ -342,13 +344,33 @@ fromSomeUnifier (SomeMvUnifier u) = MvUnifier u
 
 toSomeUnifier (MvUnifier u) = SomeMvUnifier u
 
+-- | Helper function to check if a variable occurs in a term.
+occursIn :: Eq a => a -> MvTerm s e (VarT a) t -> Bool
+occursIn v (MvHs _ (Var _ x))   = v BP.== x
+occursIn v (MvEntity (Var _ x)) = v BP.== x
+occursIn v (MvApp x y)          =  occursIn v x || occursIn v y
+occursIn v _                    = False
+
+-- Note: Old implemntation:
+{-
+unifyTerm :: Term -> Term -> Maybe (Unifier Term)
+-- "_" matches anything
+unifyTerm (Var "_") t                      = return []
+unifyTerm t (Var "_")                      = return []
+unifyTerm (Var x) (Var y) | x == y         = return []
+unifyTerm (Var x) t | not(x `occursIn` t)  = return [(x, t)]
+unifyTerm t v@(Var _)                      = unify v t
+unifyTerm (Comp m ms) (Comp n ns) | m == n = unifyListTerms ms ns
+unifyTerm _ _                              = Nothing
+-}
+
 instance (SDecide s, EntityEq s e, SinglyTyped s e, Eq a) => Unifiable (MvTerm s e (VarT a) t) a where
   newtype Unifier (MvTerm s e (VarT a) t) a
     = MvUnifier (CommonUnifier s e a)
         deriving(Semigroup, Monoid)
 
   compose (MvUnifier u1) (MvUnifier u2) = MvUnifier $
-      (map (\(v, SomeMvTerm t) -> (v, SomeMvTerm $ subs (MvUnifier u2) t)) u1)
+      (map (\(v, SomeMvTerm sT t) -> (v, SomeMvTerm sT $ subs (MvUnifier u2) t)) u1)
          ++ u2
 
   subs (MvUnifier u) term = case term of
@@ -358,32 +380,60 @@ instance (SDecide s, EntityEq s e, SinglyTyped s e, Eq a) => Unifiable (MvTerm s
       otherwise          -> term
 
   unify (MvApp x y) (MvApp x' y') = do
-      -- Note: Need to use singletons here to
-      -- check if the two types are the same.
       xu <- case typeOfMv x %~ typeOfMv x' of
-                Proved Refl -> fromSomeUnifier <$> unify (SomeMvTerm x) (SomeMvTerm x')
+                Proved Refl -> fromSomeUnifier <$> unify (SomeMvTerm (typeOfMv x) x) (SomeMvTerm (typeOfMv x) x')
                 otherwise   -> Nothing
       yu <- case typeOfMv y %~ typeOfMv y' of
-                Proved Refl -> fromSomeUnifier <$> unify (SomeMvTerm y) (SomeMvTerm y')
+                Proved Refl -> fromSomeUnifier <$> unify (SomeMvTerm (typeOfMv y) y) (SomeMvTerm (typeOfMv y) y')
                 otherwise   -> Nothing
       return $ xu `compose` yu
-  unify (MvEntity (Var t1 x)) e@(MvEntity (Ground y)) = let t2 = typeOfMv e in
+
+  unify (MvEntity (Ground _ x)) e@(MvEntity (Ground _ y)) | x `entityEquals` y = return $ MvUnifier []
+
+  unify e@(MvHs _ (Var t1 y)) e2@(MvHs _ (Var t2 x)) 
+    | x BP.== y = Nothing
+    | otherwise = case t1 %~ t2 of
+        Proved Refl -> return $ MvUnifier [(y, SomeMvTerm t2 e2)]
+        otherwise   -> Nothing
+  unify e@(MvEntity (Var t1 y)) e2@(MvEntity (Var t2 x)) 
+    | x BP.== y = Nothing 
+    | otherwise = case t1 %~ t2 of
+        Proved Refl -> return $ MvUnifier [(y, SomeMvTerm t2 e2)]
+        otherwise   -> Nothing
+
+  unify (MvEntity (Var t1 x)) e@(MvEntity (Ground t2 y)) | not(x `occursIn` e) = 
       case t1 %~ t2 of
-          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
           otherwise   -> Nothing
-  unify (MvEntity (Ground x)) e@(MvEntity (Ground y)) | x `entityEquals` y = return $ MvUnifier []
-  unify e@(MvEntity (Ground y)) (MvEntity (Var t1 x)) = let t2 = typeOfMv e in
+  unify (MvEntity (Var t1 x)) e@(MvHs _ (Ground t2 y)) | not(x `occursIn` e) = 
+    case t1 %~ t2 of
+        Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
+        otherwise   -> Nothing
+
+  unify t@(MvHs _ (Ground _ _)) v@(MvHs _ (Var _ _)) = trace "Swap 1" $ unify v t
+  unify t@(MvEntity (Ground _ _)) v@(MvEntity (Var _ _)) = trace "Swap 2" $ unify v t
+{-
+  unify e@(MvEntity (Ground t2 y)) (MvEntity (Var t1 x)) = 
+      case t1 %~ t2 of1
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
+          otherwise   -> Nothing
+  unify (MvHs _ (Var t1 x)) e@(MvHs t2 (Ground _ y)) = 
       case t1 %~ t2 of
-          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
           otherwise   -> Nothing
-  unify (MvHs _ (Var t1 x)) e@(MvHs t2 (Ground y)) = 
+  unify e@(MvHs t2 (Ground _ y)) (MvHs _ (Var t1 x)) = 
       case t1 %~ t2 of
-          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
           otherwise   -> Nothing
-  unify e@(MvHs t2 (Ground y)) (MvHs _ (Var t1 x)) = 
+  unify e@(MvEntity (Var t1 y)) (MvEntity (Var t2 x)) = 
       case t1 %~ t2 of
-          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm e)]
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
           otherwise   -> Nothing
+  unify e@(MvHs _ (Var t1 y)) (MvHs _ (Var t2 x)) = 
+      case t1 %~ t2 of
+          Proved Refl -> return $ MvUnifier [(x, SomeMvTerm t1 e)]
+          otherwise   -> Nothing
+-}
   unify _ _ = Nothing
 
 class EntityEq s (e :: MvType s -> *) | s -> e where
@@ -403,19 +453,22 @@ instance (SDecide s, EntityEq s e, SinglyTyped s e, Eq a) => Unifiable (SomeMvTe
   compose (SomeMvUnifier u1) (SomeMvUnifier u2) = SomeMvUnifier $
       (map (\(v, t) -> (v, subs (SomeMvUnifier u2) t)) u1) ++ u2
 
-  subs (SomeMvUnifier u) (SomeMvTerm term)
-      = SomeMvTerm $ subs (MvUnifier u) term
+  subs (SomeMvUnifier u) (SomeMvTerm s term)
+      = SomeMvTerm s $ subs (MvUnifier u) term
 
-  unify (SomeMvTerm x) (SomeMvTerm y) =
-      case typeOfMv x %~ typeOfMv y of
+  unify (SomeMvTerm s1 x) (SomeMvTerm s2 y) =
+      case s1 %~ s2 of
           Proved Refl -> toSomeUnifier <$> unify x y
 	  otherwise   -> Nothing
 
 coerceSomeTerm :: Sing t -> SomeMvTerm s e f -> MvTerm s e f t
-coerceSomeTerm _ (SomeMvTerm x) = unsafeCoerce x
+coerceSomeTerm _ (SomeMvTerm _ x) = unsafeCoerce x
 
 newtype MvGoal a s (e :: MvType s -> *)
   = MvGoal [SomeMvTerm s e (VarT a)]
+
+instance Show (SomeMvTerm s e (VarT a)) => Show (MvGoal a s e) where
+  show (MvGoal ts) = intercalate ", " $ fmap show ts
 
 data MvClause a s (e :: MvType s -> *) = MvClause {
   head :: SomeMvTerm s e (VarT a),
@@ -432,7 +485,7 @@ instance Freshenable (MvClause String s e) String where
   freshen vars (MvClause head body) = MvClause (freshen vars head) (freshen vars <$> body)
 
 instance Freshenable (SomeMvTerm s e (VarT String)) String where
-  freshen vars (SomeMvTerm x) = SomeMvTerm $ freshen vars x
+  freshen vars (SomeMvTerm s x) = SomeMvTerm s $ freshen vars x
 
 instance Freshenable (MvTerm s e (VarT String) t) String where
   freshen vars (MvHs t (Var s x))   | x `BP.elem` vars = freshen vars $ MvHs t (Var s ('\'':x))
@@ -444,13 +497,13 @@ instance Freshenable (MvTerm s e (VarT String) t) String where
 --   if it has no free variables.
 ground :: MvTerm s e (VarT v) t -> Maybe (MvTerm s e IdT t)
 ground = \case
-  MvHs s (Ground x) -> Just $ MvHs s (Id x)
-  MvEntity (Ground x) -> Just $ MvEntity (Id x)
+  MvHs s (Ground _ x) -> Just $ MvHs s (Id s x)
+  MvEntity (Ground s x) -> Just $ MvEntity (Id s x)
   MvApp mX mY -> do
     x <- ground mX
     y <- ground mY
     return $ MvApp x y
   otherwise -> Nothing
 
-groundSome (SomeMvTerm e)
-  = SomeMvTerm <$> ground e
+groundSome (SomeMvTerm s e)
+  = SomeMvTerm s <$> ground e

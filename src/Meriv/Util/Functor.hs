@@ -3,8 +3,8 @@ module Meriv.Util.Functor where
 
 import Data.Singletons
 
-data VarT x t a
-  = Ground a
+data VarT x e t
+  = Ground (Sing t) (e t)
   | Var (Sing t) x
 
-data IdT t a = Id a
+data IdT e t = Id (Sing t) (e t)
