@@ -12,7 +12,7 @@ import Data.Singletons.TH
 import Control.Monad.Tree
 import Meriv.Interp
 import GHC.Types
-import Data.List.Singletons
+import Data.Singletons.Prelude.List
 
 data MySchema =
     Person

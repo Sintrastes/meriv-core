@@ -13,7 +13,7 @@ module Meriv.Query(
 import Prelude hiding (sort)
 import Data.Singletons
 import Data.Singletons.TH
-import Data.List.Singletons
+import Data.Singletons.Prelude.List
 import Meriv.Interp
 import Meriv.Types
 import Meriv.Util.Functor
