@@ -470,6 +470,12 @@ newtype MvGoal a s (e :: MvType s -> *)
 instance Show (SomeMvTerm s e (VarT a)) => Show (MvGoal a s e) where
   show (MvGoal ts) = intercalate ", " $ fmap show ts
 
+instance HasTypedVariables (SomeMvTerm s e (VarT String)) (MvType s) String where
+  typedVariables (SomeMvTerm _ x) = undefined
+
+instance HasTypedVariables (MvGoal String s e) (MvType s) String where
+  typedVariables (MvGoal ts) = ts >>= typedVariables
+
 data MvClause a s (e :: MvType s -> *) = MvClause {
   head :: SomeMvTerm s e (VarT a),
   body :: [SomeMvTerm s e (VarT a)]

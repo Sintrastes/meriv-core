@@ -41,15 +41,13 @@ data MvQuery s e v a = forall (as :: [MvType s]). MvQuery {
 --   SList, and each variable should have a type that corresponds to
 --   the type specified in the SList. Otherwise, this function will return 
 --   Nothing.
-mkQuery :: forall s e v a (as :: [MvType s]). (
-    SingKind s, 
-    Eq (Demote s),
-    Ord s, Ord (Demote s),
-    HasTypedVariables (MvGoal v s e) (MvType (Demote s)) s) 
+mkQuery :: forall s e a (as :: [MvType s]). (
+    Eq s, Ord (Demote s), SingKind s,
+    HasTypedVariables (MvGoal String s e) (MvType (Demote s)) String) 
   => SList as 
-  -> MvGoal v s e
+  -> MvGoal String s e
   -> (HList (FMapTerms s e as) -> a)
-  -> Maybe (MvQuery s e v a)
+  -> Maybe (MvQuery s e String a)
 mkQuery types goal select = if variableOccurances BP.== queryVariables
   then Just $ MvQuery types goal select
   else Nothing
