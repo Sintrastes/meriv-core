@@ -56,34 +56,43 @@ $(genSingletons [''MySchema])
 $(singDecideInstances [''MySchema])
 
 data MyEntity (t :: MvType MySchema) where
-    Nate         :: MyEntity ('MvBaseT 'Person)
-    Will         :: MyEntity ('MvBaseT 'Person)
-    NewYorkCity  :: MyEntity ('MvBaseT 'Place)
-    NewYorkState :: MyEntity ('MvBaseT 'Place)
-    Guitar       :: MyEntity ('MvBaseT 'Thing)
-    LivesIn      :: MyEntity ('MvFunT ('MvBaseT 'Person)
+    Nate           :: MyEntity ('MvBaseT 'Person)
+    Will           :: MyEntity ('MvBaseT 'Person)
+    NewYorkCity    :: MyEntity ('MvBaseT 'Place)
+    NewYorkState   :: MyEntity ('MvBaseT 'Place)
+    Guitar         :: MyEntity ('MvBaseT 'Thing)
+    DirectLivesIn  :: MyEntity ('MvFunT ('MvBaseT 'Person)
                                ('MvFunT ('MvBaseT 'Place) 'MvPredT))
-    SubsetOf     :: MyEntity ('MvFunT ('MvBaseT 'Place)
+    LivesIn        :: MyEntity ('MvFunT ('MvBaseT 'Person)
+                               ('MvFunT ('MvBaseT 'Place) 'MvPredT))
+    SubsetOf       :: MyEntity ('MvFunT ('MvBaseT 'Place)
+                               ('MvFunT ('MvBaseT 'Place) 'MvPredT))
+    DirectSubsetOf :: MyEntity ('MvFunT ('MvBaseT 'Place)
                                ('MvFunT ('MvBaseT 'Place) 'MvPredT))
 
 instance SinglyTyped MySchema MyEntity where
     getTypeSing = \case
-        Nate         -> SMvBaseT SPerson
-        Will         -> SMvBaseT SPerson
-        NewYorkCity  -> SMvBaseT SPlace
-        NewYorkState -> SMvBaseT SPlace
-        Guitar       -> SMvBaseT SThing
-        LivesIn      -> SMvFunT (SMvBaseT SPerson) (SMvFunT (SMvBaseT SPlace) SMvPredT)
+        Nate           -> SMvBaseT SPerson
+        Will           -> SMvBaseT SPerson
+        NewYorkCity    -> SMvBaseT SPlace
+        NewYorkState   -> SMvBaseT SPlace
+        Guitar         -> SMvBaseT SThing
+        LivesIn        -> SMvFunT (SMvBaseT SPerson) (SMvFunT (SMvBaseT SPlace) SMvPredT)
+        DirectLivesIn  -> SMvFunT (SMvBaseT SPerson) (SMvFunT (SMvBaseT SPlace) SMvPredT)
+        SubsetOf       -> SMvFunT (SMvBaseT SPlace) (SMvFunT (SMvBaseT SPlace) SMvPredT)
+        DirectSubsetOf -> SMvFunT (SMvBaseT SPlace) (SMvFunT (SMvBaseT SPlace) SMvPredT)
 
 instance ShowAllTypes MyEntity where
     showAll = \case
-        Nate         -> "nate"
-        Will         -> "will"
-        NewYorkCity  -> "new_york_city"
-        NewYorkState -> "new_york_state"
-        Guitar       -> "guitar"
-        LivesIn      -> "lives_in"
-        SubsetOf     -> "subset_of"
+        Nate           -> "nate"
+        Will           -> "will"
+        NewYorkCity    -> "new_york_city"
+        NewYorkState   -> "new_york_state"
+        Guitar         -> "guitar"
+        LivesIn        -> "lives_in"
+        DirectLivesIn        -> "lives_in"
+        SubsetOf       -> "subset_of"
+        DirectSubsetOf -> "direct_subset_of"
 
 instance EntityEq MySchema MyEntity where
     Nate `entityEquals` Nate = True 
@@ -92,12 +101,18 @@ instance EntityEq MySchema MyEntity where
     NewYorkState `entityEquals` NewYorkState = True
     Guitar `entityEquals` Guitar = True 
     LivesIn `entityEquals` LivesIn = True 
+    DirectLivesIn `entityEquals` DirectLivesIn = True 
     SubsetOf `entityEquals` SubsetOf = True
+    DirectSubsetOf `entityEquals` DirectSubsetOf = True
     _ `entityEquals` _ = False   
 
 livesIn f t = MvEntity (f t LivesIn)
 
+directLivesIn f t = MvEntity (f t DirectLivesIn)
+
 subsetOf f t = MvEntity (f t SubsetOf)
+
+directSubsetOf f t = MvEntity (f t DirectSubsetOf)
 
 example :: GroundMvTerm MySchema MyEntity 'MvPredT
 example =
@@ -107,27 +122,40 @@ example =
 
 exampleProgram = MvRules
   [
+      -- direct_lives_in(nate, new_york_city)
       MvClause
         (SomeMvTerm SMvPredT $ MvApp
-           (MvApp (livesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
+           (MvApp (directLivesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
 	           (MvEntity $ Ground (SMvBaseT SPlace) NewYorkCity))
         []
+    -- subset_of(new_york_city, new_york_state)
     , MvClause 
         (SomeMvTerm SMvPredT $ MvApp
             (MvApp (subsetOf Ground subsetOfType) (MvEntity $ Ground (SMvBaseT SPlace) NewYorkCity))
 	            (MvEntity $ Ground (SMvBaseT SPlace) NewYorkState))
         []
+    -- lives_in(X,Z) :- direct_lives_in(X,Y), subset_of(Y,Z).
     , MvClause
         (SomeMvTerm SMvPredT $ MvApp
            (MvApp (livesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
 	           (MvEntity $ Var (SMvBaseT SPlace) "Z"))
         [
           (SomeMvTerm SMvPredT $ MvApp
-	     (MvApp (livesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
+	     (MvApp (directLivesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
 	     (MvEntity $ Var (SMvBaseT SPlace) "Y"))
         , (SomeMvTerm SMvPredT $ MvApp
              (MvApp (subsetOf Ground subsetOfType) (MvEntity $ Var (SMvBaseT SPlace) "Y"))
 	     (MvEntity $ Var (SMvBaseT SPlace) "Z"))
+        ]
+    -- lives_in(X,Y) :- direct_lives_in(X,Y).
+    , MvClause
+        (SomeMvTerm SMvPredT $ MvApp
+           (MvApp (livesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
+	           (MvEntity $ Var (SMvBaseT SPlace) "Y"))
+        [
+          (SomeMvTerm SMvPredT $ MvApp
+	     (MvApp (directLivesIn Ground livesInType) (MvEntity $ Var (SMvBaseT SPerson) "X"))
+	     (MvEntity $ Var (SMvBaseT SPlace) "Y"))
         ]
   ]
 
@@ -169,13 +197,17 @@ main = do
     print $ unify term5 term6
     putStrLn "Search test:"
     -- Search example:
-    let goal = (MvGoal [
+
+    -- lives_in(nate, X)
+    let goal = MvGoal [
             SomeMvTerm SMvPredT $ MvApp (MvApp (livesIn Ground livesInType) (MvEntity $ Ground (SMvBaseT SPerson) Nate))
             (MvEntity $ Var (SMvBaseT SPlace) "X")
-          ])
-    let searchResults = take 3 $ bfs $ search exampleProgram goal
+          ]
+    
+    let searchResults = bfs $ search exampleProgram goal
     print searchResults
     -- Query API example:
     -- let Just query = mkQuery ((SMvBaseT SPlace) `SCons` SNil) goal id
     -- print $ runQuery bfs query exampleProgram
+    pure ()
     
